@@ -152,6 +152,19 @@
     }
     .token-bar button:hover { color: #718096; }
 
+    /* PR 狀態徽章 */
+    .pr-status {
+      font-size: 0.75rem;
+      margin-left: 8px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    .pr-status.pending { background: #fef3c7; color: #92400e; }
+    .pr-status.success { background: #d1fae5; color: #065f46; }
+    .pr-status.failure { background: #fee2e2; color: #991b1b; }
+
     /* Token 輸入彈窗 */
     .token-modal {
       display: none;
@@ -346,7 +359,44 @@
         })
       });
 
-      return { prUrl: pr.html_url, prNumber: pr.number, title };
+      return { prUrl: pr.html_url, prNumber: pr.number, title, headSha: pr.head.sha };
+    }
+
+    /* ── PR 狀態輪詢 ── */
+    async function pollPRStatus(headSha, badgeEl) {
+      const MAX = 36; // 最多 6 分鐘（36 × 10s）
+      let attempts = 0;
+
+      async function tick() {
+        if (attempts++ >= MAX) {
+          badgeEl.textContent = '⏱️ 逾時';
+          badgeEl.className = 'pr-status failure';
+          return;
+        }
+        try {
+          const data = await ghFetch(`/repos/${REPO}/commits/${headSha}/check-runs`);
+          const runs = data.check_runs || [];
+          if (runs.length === 0) { setTimeout(tick, 10000); return; }
+
+          const allDone = runs.every(r => r.status === 'completed');
+          const anyFailed = runs.some(r => r.conclusion === 'failure');
+
+          if (!allDone) {
+            badgeEl.textContent = '⏳ 處理中';
+            badgeEl.className = 'pr-status pending';
+            setTimeout(tick, 10000);
+          } else if (anyFailed) {
+            badgeEl.textContent = '❌ 失敗';
+            badgeEl.className = 'pr-status failure';
+          } else {
+            badgeEl.textContent = '✅ 完成';
+            badgeEl.className = 'pr-status success';
+          }
+        } catch (_) {
+          setTimeout(tick, 10000); // 網路錯誤靜默重試
+        }
+      }
+      tick();
     }
 
     /* ── 送出按鈕 ── */
@@ -372,7 +422,7 @@
       setStatus('建立分支與 PR 中…', 'loading');
 
       try {
-        const { prUrl, prNumber, title } = await createPR(text);
+        const { prUrl, prNumber, title, headSha } = await createPR(text);
 
         // 新增到留言紀錄
         const li = document.createElement('li');
@@ -384,12 +434,17 @@
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.textContent = `→ PR #${prNumber} 已建立`;
+        const badge = document.createElement('span');
+        badge.className = 'pr-status pending';
+        badge.textContent = '⏳ 處理中';
+        link.appendChild(badge);
         li.appendChild(span);
         li.appendChild(link);
         commentList.prepend(li);
 
         commentIn.value = '';
         setStatus(`PR #${prNumber} 建立成功！`, 'success');
+        pollPRStatus(headSha, badge);
       } catch (err) {
         if (err.message.includes('401') || err.message.includes('Bad credentials')) {
           clearToken();
