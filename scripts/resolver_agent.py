@@ -116,10 +116,16 @@ def build_prompt(mode: str, title: str, body: str, diff: str, spec: str, code: s
             f"Modify {impl_file} to fix the bug."
         )
     instruction = (
-        "Return the result using ONLY these two XML tags (include full file content, or omit the tag entirely if no change is needed):\n"
-        f"<spec>...full new {spec_file} content...</spec>\n"
-        f"<code>...full new {impl_file} content...</code>\n"
-        "Do NOT wrap output in markdown fences or JSON."
+        f"Return ONLY targeted replacement blocks — do NOT return full file content.\n"
+        f"Use <code_replace> for changes to {impl_file}, <spec_replace> for changes to {spec_file}.\n"
+        "Each block must contain <old> (exact verbatim text to find, include 2-3 lines of context to be unique) "
+        "and <new> (replacement text). Use the minimum replacements needed.\n"
+        "If a file needs no changes, omit its blocks entirely.\n"
+        "Example:\n"
+        "<code_replace>\n"
+        "<old>exact line(s) to find in the file</old>\n"
+        "<new>replacement line(s)</new>\n"
+        "</code_replace>"
     )
     untrusted_warning = (
         "=== UNTRUSTED USER INPUT BELOW ===\n"
@@ -152,13 +158,24 @@ def call_resolver(prompt: str, model: str) -> str:
     return response.content[0].text
 
 
-def parse_response(raw: str) -> dict:
-    """從 XML 標籤提取 spec 和 code（比 JSON 更可靠，不需 escape HTML 特殊字元）。"""
-    def extract(tag: str) -> str | None:
-        m = re.search(rf"<{tag}>(.*?)</{tag}>", raw, re.DOTALL)
-        return m.group(1).strip() if m else None
+def parse_replacements(raw: str, tag: str) -> list[tuple[str, str]]:
+    """從 XML 中提取所有 <tag><old>...</old><new>...</new></tag> 替換對。"""
+    pairs = []
+    for m in re.finditer(rf"<{tag}>\s*<old>(.*?)</old>\s*<new>(.*?)</new>\s*</{tag}>", raw, re.DOTALL):
+        pairs.append((m.group(1), m.group(2)))
+    return pairs
 
-    return {"spec": extract("spec"), "code": extract("code")}
+
+def apply_replacements(content: str, pairs: list[tuple[str, str]], filename: str) -> tuple[str, bool]:
+    """套用替換對到檔案內容，回傳（新內容, 是否有任何變更）。"""
+    changed = False
+    for old, new in pairs:
+        if old in content:
+            content = content.replace(old, new, 1)
+            changed = True
+        else:
+            print(f"Warning: replacement target not found in {filename}: {old[:120]!r}", file=sys.stderr)
+    return content, changed
 
 
 def write_with_trailing_newline(path: Path, content: str) -> None:
@@ -212,23 +229,24 @@ def main() -> None:
     raw_response = call_resolver(prompt, model)
     print(f"Model response length: {len(raw_response)} chars")
 
-    payload = parse_response(raw_response)
     changed_files: list[str] = []
 
-    # 通用 key 名稱：'spec' 對應 spec_file、'code' 對應 implementation_target，
-    # 與檔名解耦。Sonnet 收到的 prompt 也已改成同樣的 key（見 build_prompt）。
-    new_spec = payload.get("spec")
-    new_code = payload.get("code")
+    code_pairs = parse_replacements(raw_response, "code_replace")
+    spec_pairs = parse_replacements(raw_response, "spec_replace")
 
-    if new_spec is not None and new_spec != spec:
-        write_with_trailing_newline(SPEC_PATH, new_spec)
-        changed_files.append(CONFIG["spec_file"])
-        print(f"Updated {CONFIG['spec_file']}")
+    if code_pairs:
+        new_code, code_changed = apply_replacements(code, code_pairs, CONFIG["implementation_target"])
+        if code_changed:
+            write_with_trailing_newline(SCRIPT_PATH, new_code)
+            changed_files.append(CONFIG["implementation_target"])
+            print(f"Updated {CONFIG['implementation_target']} ({len(code_pairs)} replacement(s))")
 
-    if new_code is not None and new_code != code:
-        write_with_trailing_newline(SCRIPT_PATH, new_code)
-        changed_files.append(CONFIG["implementation_target"])
-        print(f"Updated {CONFIG['implementation_target']}")
+    if spec_pairs:
+        new_spec, spec_changed = apply_replacements(spec, spec_pairs, CONFIG["spec_file"])
+        if spec_changed:
+            write_with_trailing_newline(SPEC_PATH, new_spec)
+            changed_files.append(CONFIG["spec_file"])
+            print(f"Updated {CONFIG['spec_file']} ({len(spec_pairs)} replacement(s))")
 
     if not changed_files:
         print("No file changes from resolver — skipping commit/push")
