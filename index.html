@@ -5,11 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Hello 楊政憲</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
@@ -42,17 +38,8 @@
       margin-bottom: 16px;
     }
 
-    h1 {
-      font-size: 2rem;
-      color: #2d3748;
-      margin-bottom: 8px;
-    }
-
-    #subtitle {
-      font-size: 1rem;
-      color: #718096;
-      margin-bottom: 24px;
-    }
+    h1 { font-size: 2rem; color: #2d3748; margin-bottom: 8px; }
+    #subtitle { font-size: 1rem; color: #718096; margin-bottom: 24px; }
 
     .clock {
       font-size: 1.5rem;
@@ -83,9 +70,7 @@
       transition: border-color 0.2s;
     }
 
-    .comment-section input[type="text"]:focus {
-      border-color: #667eea;
-    }
+    .comment-section input[type="text"]:focus { border-color: #667eea; }
 
     .comment-section button {
       margin-top: 12px;
@@ -97,16 +82,25 @@
       border-radius: 8px;
       font-size: 1rem;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.2s, opacity 0.2s;
     }
 
-    .comment-section button:hover {
-      background: #5a67d8;
-    }
+    .comment-section button:hover:not(:disabled) { background: #5a67d8; }
+    .comment-section button:disabled { opacity: 0.6; cursor: not-allowed; }
 
-    .comment-list {
-      margin-top: 24px;
+    /* 狀態訊息 */
+    .status {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      min-height: 1.2em;
+      text-align: center;
     }
+    .status.loading { color: #718096; }
+    .status.error   { color: #e53e3e; }
+    .status.success { color: #38a169; }
+
+    /* 留言紀錄 */
+    .comment-list { margin-top: 24px; }
 
     .comment-list h2 {
       font-size: 0.95rem;
@@ -116,9 +110,7 @@
       letter-spacing: 0.08em;
     }
 
-    .comment-list ul {
-      list-style: none;
-    }
+    .comment-list ul { list-style: none; }
 
     .comment-list li {
       padding: 10px 14px;
@@ -126,13 +118,101 @@
       border-left: 3px solid #667eea;
       border-radius: 4px;
       margin-bottom: 8px;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       color: #2d3748;
       word-break: break-word;
     }
+
+    .comment-list li .pr-link {
+      display: block;
+      font-size: 0.78rem;
+      color: #667eea;
+      margin-top: 4px;
+      text-decoration: none;
+    }
+    .comment-list li .pr-link:hover { text-decoration: underline; }
+
+    /* Token 管理 */
+    .token-bar {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #edf2f7;
+      font-size: 0.78rem;
+      color: #a0aec0;
+      text-align: right;
+    }
+    .token-bar button {
+      background: none;
+      border: none;
+      color: #a0aec0;
+      cursor: pointer;
+      font-size: 0.78rem;
+      text-decoration: underline;
+      padding: 0;
+    }
+    .token-bar button:hover { color: #718096; }
+
+    /* Token 輸入彈窗 */
+    .token-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .token-modal.open { display: flex; }
+    .token-modal-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px 32px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.16);
+    }
+    .token-modal-box h3 { font-size: 1rem; color: #2d3748; margin-bottom: 8px; }
+    .token-modal-box p  { font-size: 0.82rem; color: #718096; margin-bottom: 14px; line-height: 1.5; }
+    .token-modal-box input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #cbd5e0;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      outline: none;
+      margin-bottom: 12px;
+      font-family: monospace;
+    }
+    .token-modal-box input:focus { border-color: #667eea; }
+    .token-modal-box .modal-actions { display: flex; gap: 8px; }
+    .token-modal-box .modal-actions button {
+      flex: 1;
+      padding: 9px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-confirm { background: #667eea; color: #fff; }
+    .btn-confirm:hover { background: #5a67d8; }
+    .btn-cancel  { background: #edf2f7; color: #4a5568; }
+    .btn-cancel:hover { background: #e2e8f0; }
   </style>
 </head>
 <body>
+  <!-- Token 輸入彈窗 -->
+  <div class="token-modal" id="token-modal">
+    <div class="token-modal-box">
+      <h3>設定 GitHub Token</h3>
+      <p>需要 GitHub Personal Access Token（fine-grained 或 classic，需有 <code>repo</code> 或 <code>pull_requests: write</code> 權限）才能自動建立 PR。Token 只存在您的瀏覽器中。</p>
+      <input type="password" id="token-input" placeholder="ghp_..." autocomplete="off">
+      <div class="modal-actions">
+        <button class="btn-cancel" id="modal-cancel">取消</button>
+        <button class="btn-confirm" id="modal-confirm">儲存</button>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="project-title">專案-webHello</div>
     <h1>hello 楊政憲</h1>
@@ -141,48 +221,191 @@
     <div class="clock" id="clock">--:--:--</div>
 
     <div class="comment-section">
-      <label for="comment-input">留言</label>
+      <label for="comment-input">留言（送出後將自動建立 GitHub PR）</label>
       <input type="text" id="comment-input" placeholder="在此輸入留言..." maxlength="200">
-      <button id="submit-btn">送出</button>
+      <button id="submit-btn">送出並建立 PR</button>
+      <div class="status" id="status"></div>
     </div>
 
     <div class="comment-list">
       <h2>留言紀錄</h2>
       <ul id="comments"></ul>
     </div>
+
+    <div class="token-bar">
+      <button id="set-token-btn">設定 / 更換 GitHub Token</button>
+    </div>
   </div>
 
   <script>
-    // 每秒更新時鐘
+    const REPO  = 'chenghyang2001/webHello';
+    const BASE  = 'https://api.github.com';
+
+    /* ── 時鐘 ── */
     function updateClock() {
       const now = new Date();
-      const hh = String(now.getHours()).padStart(2, '0');
-      const mm = String(now.getMinutes()).padStart(2, '0');
-      const ss = String(now.getSeconds()).padStart(2, '0');
-      document.getElementById('clock').textContent = `${hh}:${mm}:${ss}`;
+      const pad = n => String(n).padStart(2, '0');
+      document.getElementById('clock').textContent =
+        `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
     }
     updateClock();
     setInterval(updateClock, 1000);
 
-    // 送出留言
-    document.getElementById('submit-btn').addEventListener('click', function () {
-      const input = document.getElementById('comment-input');
-      const text = input.value.trim();
+    /* ── Token 管理 ── */
+    function getToken() { return localStorage.getItem('gh_token') || ''; }
+    function saveToken(t) { localStorage.setItem('gh_token', t.trim()); }
+    function clearToken() { localStorage.removeItem('gh_token'); }
+
+    const modal       = document.getElementById('token-modal');
+    const tokenInput  = document.getElementById('token-input');
+
+    function openTokenModal(resolve) {
+      tokenInput.value = getToken();
+      modal.classList.add('open');
+      tokenInput.focus();
+      document.getElementById('modal-confirm').onclick = () => {
+        const t = tokenInput.value.trim();
+        if (t) { saveToken(t); modal.classList.remove('open'); resolve(t); }
+      };
+      document.getElementById('modal-cancel').onclick = () => {
+        modal.classList.remove('open'); resolve(null);
+      };
+    }
+
+    function requireToken() {
+      return new Promise(resolve => {
+        const t = getToken();
+        if (t) { resolve(t); return; }
+        openTokenModal(resolve);
+      });
+    }
+
+    document.getElementById('set-token-btn').onclick = () =>
+      openTokenModal(() => {});
+
+    /* ── GitHub API helpers ── */
+    async function ghFetch(path, options = {}) {
+      const token = getToken();
+      const res = await fetch(`${BASE}${path}`, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    /* Base64-encode UTF-8（瀏覽器安全版，支援中文） */
+    function toBase64(str) {
+      return btoa(unescape(encodeURIComponent(str)));
+    }
+
+    /* ── 建立 PR 主流程 ── */
+    async function createPR(comment) {
+      const ts         = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const branch     = `comment-${ts}`;
+      const filePath   = `comments/${ts}.md`;
+      const fileContent = `# 留言\n\n${comment}\n\n_提交時間：${new Date().toLocaleString('zh-TW')}_\n`;
+
+      // 1. 取得 master 最新 commit SHA
+      const ref = await ghFetch(`/repos/${REPO}/git/refs/heads/master`);
+      const masterSha = ref.object.sha;
+
+      // 2. 建立新 branch
+      await ghFetch(`/repos/${REPO}/git/refs`, {
+        method: 'POST',
+        body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: masterSha })
+      });
+
+      // 3. 在新 branch 上建立檔案
+      await ghFetch(`/repos/${REPO}/contents/${filePath}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: `新增留言：${comment.slice(0, 50)}`,
+          content: toBase64(fileContent),
+          branch
+        })
+      });
+
+      // 4. 建立 PR
+      const title = comment.length > 72 ? comment.slice(0, 69) + '...' : comment;
+      const pr = await ghFetch(`/repos/${REPO}/pulls`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title,
+          body: `## 用戶留言\n\n${comment}\n\n_透過 webHello 頁面自動提交_`,
+          head: branch,
+          base: 'master'
+        })
+      });
+
+      return { prUrl: pr.html_url, prNumber: pr.number, title };
+    }
+
+    /* ── 送出按鈕 ── */
+    const submitBtn  = document.getElementById('submit-btn');
+    const commentIn  = document.getElementById('comment-input');
+    const statusDiv  = document.getElementById('status');
+    const commentList = document.getElementById('comments');
+
+    function setStatus(msg, type) {
+      statusDiv.textContent = msg;
+      statusDiv.className = `status ${type}`;
+    }
+
+    submitBtn.addEventListener('click', async () => {
+      const text = commentIn.value.trim();
       if (!text) return;
 
-      const li = document.createElement('li');
-      li.textContent = text;   // textContent 防 XSS
-      document.getElementById('comments').prepend(li);
+      const token = await requireToken();
+      if (!token) { setStatus('未提供 Token，已取消', 'error'); return; }
 
-      input.value = '';
-      input.focus();
+      submitBtn.disabled = true;
+      commentIn.disabled = true;
+      setStatus('建立分支與 PR 中…', 'loading');
+
+      try {
+        const { prUrl, prNumber, title } = await createPR(text);
+
+        // 新增到留言紀錄
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        span.textContent = text;
+        const link = document.createElement('a');
+        link.className = 'pr-link';
+        link.href = prUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = `→ PR #${prNumber} 已建立`;
+        li.appendChild(span);
+        li.appendChild(link);
+        commentList.prepend(li);
+
+        commentIn.value = '';
+        setStatus(`PR #${prNumber} 建立成功！`, 'success');
+      } catch (err) {
+        if (err.message.includes('401') || err.message.includes('Bad credentials')) {
+          clearToken();
+          setStatus('Token 無效，請重新設定', 'error');
+        } else {
+          setStatus(`錯誤：${err.message}`, 'error');
+        }
+      } finally {
+        submitBtn.disabled = false;
+        commentIn.disabled = false;
+        commentIn.focus();
+      }
     });
 
-    // Enter 鍵也可以送出
-    document.getElementById('comment-input').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        document.getElementById('submit-btn').click();
-      }
+    commentIn.addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitBtn.click();
     });
   </script>
 </body>
