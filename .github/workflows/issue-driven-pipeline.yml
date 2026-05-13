@@ -37,6 +37,7 @@ jobs:
         run: |
           BRANCH="feature/issue-${ISSUE_NUMBER}"
           git checkout -b "$BRANCH"
+          git commit --allow-empty -m "Issue #${ISSUE_NUMBER}：初始化 feature branch（IDD placeholder）"
           git push origin "$BRANCH"
           PR_BODY=$(printf 'Resolves #%s\n\n## Issue 描述\n\n%s' "$ISSUE_NUMBER" "$ISSUE_BODY")
           gh pr create \
