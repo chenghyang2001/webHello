@@ -83,6 +83,29 @@ IDD（Issue-Driven Development）流程：
 
 觸發條件：Issue `opened`
 
+### ROLLBACK 流程（緊急三分鐘回退協議）
+
+使用 `.github/ISSUE_TEMPLATE/rollback.yml` 建立結構化 Issue，觸發全自動 `git revert`：
+
+```
+建立 Issue（[ROLLBACK] 回退到 commit <hash>）
+  → IDD Pipeline 建立 feature/issue-N branch + PR
+  → classify：偵測 [ROLLBACK] 前綴 → mode=ROLLBACK（跳過 Haiku API 呼叫）
+  → resolver：git cat-file -t 驗證 hash → git revert <hash> --no-edit → push
+              衝突時 git revert --abort + PR comment 通知人工介入
+  → qa：結構性驗證（index.html 存在 + <html>/<body> 標籤），不呼叫 Sonnet / pytest
+  → auto-merge
+```
+
+**ROLLBACK Issue Template**（`.github/ISSUE_TEMPLATE/rollback.yml`）欄位：
+- `commit_hash`：目標穩定版本的 7–40 字元 hex commit hash
+- `reason`：回退原因說明
+- `confirm`：操作確認 checkbox（確認目標為已知穩定版本、了解 revert 不刪除歷史）
+
+**commit hash 解析規則**（`resolver_agent.py extract_commit_hash()`）：
+1. 標題 inline 格式：`[ROLLBACK] 回退到 commit d1a2b4f`
+2. Issue template 結構化欄位：`### 目標 commit hash\n\nd1a2b4f`
+
 ### 防護機制
 - **Bot-loop 防護**：跳過 `github-actions[bot]` 建立的 Issue（`if: github.event.issue.user.login != 'github-actions[bot]'`）
 - **Concurrency 防護**：同一 Issue 重複觸發時取消前次（`group: issue-to-pr-{issue.number}`）
@@ -109,8 +132,8 @@ concurrency:
 
 | Job | 模型 | 腳本 | 說明 |
 |-----|------|------|------|
-| `classify` | Claude Haiku | `scripts/classify_pr.py` | 判斷 PR 意圖，輸出 `mode` |
-| `resolver_qa` | Claude Sonnet | `scripts/resolver_agent.py` + `scripts/qa_agent.py` | Resolver + QA retry loop（最多 3 次）；QA 失敗自動重試，三次全失敗則 PR 留言通知並讓 job 亮紅燈 |
+| `classify` | Claude Haiku | `scripts/classify_pr.py` | 判斷 PR 意圖，輸出 `mode`；標題含 `[ROLLBACK]` 時快速路徑直接輸出 `ROLLBACK`，不呼叫 API |
+| `resolver_qa` | Claude Sonnet | `scripts/resolver_agent.py` + `scripts/qa_agent.py` | Resolver + QA retry loop（最多 3 次）；ROLLBACK 模式繞過 AI 生成直接執行 `git revert`，QA 僅做 HTML 結構驗證 |
 | `merge` | — | `gh pr merge` | 對 `comment-*` 及 `feature/*` branch 自動合併並刪除 branch（需 `resolver_qa` 成功） |
 
 環境變數：
