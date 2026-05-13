@@ -121,6 +121,8 @@ jobs:
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
             echo "=== Resolver+QA Attempt ${attempt}/${MAX_ATTEMPTS} ==="
 
+            # 清除 QA 自動產生的 test_index.py（tracked 檔），避免 git pull --rebase 因 unstaged 改動而失敗
+            git restore . 2>/dev/null || true
             # 拉最新（避免上一輪 resolver push 後本地與遠端不一致，--rebase 保持線性歷史）
             git pull origin "$BRANCH" --rebase 2>&1 || { git rebase --abort 2>/dev/null || true; echo "⚠️ pre-resolver pull failed on attempt ${attempt}, skipping"; continue; }
 
@@ -128,6 +130,7 @@ jobs:
             python scripts/resolver_agent.py
 
             # 拉 resolver push 的新 commit，確保 QA 檢查的是最新程式碼
+            git restore . 2>/dev/null || true
             git pull origin "$BRANCH" --rebase 2>&1 || { git rebase --abort 2>/dev/null || true; echo "⚠️ post-resolver pull failed on attempt ${attempt}, skipping"; continue; }
 
             # 執行 QA（依據真實 exit code 判斷是否通過）
