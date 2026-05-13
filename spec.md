@@ -67,6 +67,34 @@ Base64 編碼：用 `btoa(unescape(encodeURIComponent(str)))` 支援中文
 
 流程：`classify (Haiku)` → `resolver_qa retry loop (Sonnet x3)` → `merge`
 
+---
+
+## Issue-Driven Development Pipeline（`issue-driven-pipeline.yml`）
+
+### 概述
+
+IDD（Issue-Driven Development）流程：
+
+```
+建立 Issue → 自動建立 feature/issue-N branch + PR
+          → pr-agent-pipeline 接手（classify → resolver → qa → merge）
+          → Issue 自動關閉（PR body 含 Resolves #N）
+```
+
+觸發條件：Issue `opened`
+
+### 防護機制
+- **Bot-loop 防護**：跳過 `github-actions[bot]` 建立的 Issue（`if: github.event.issue.user.login != 'github-actions[bot]'`）
+- **Concurrency 防護**：同一 Issue 重複觸發時取消前次（`group: issue-to-pr-{issue.number}`）
+
+### Job 流程
+
+| 步驟 | 說明 |
+|------|------|
+| Checkout | 取出 master |
+| Configure git identity | 設定 `github-actions[bot]` 身份 |
+| Create branch and open PR | 建立 `feature/issue-{N}` branch，開 PR（body 含 `Resolves #N`）|
+
 ### Bot-loop 防護
 最後一個 commit 若由 `github-actions[bot]` 提交 → 整條 pipeline 跳過，避免無限迴圈。
 
@@ -128,6 +156,7 @@ helloWeb/
 ├── comments/                           # PR 自動合併後的留言檔案
 ├── .github/workflows/
 │   ├── pr-agent-pipeline.yml           # 主 Pipeline（classify→resolver→qa→merge）
+│   ├── issue-driven-pipeline.yml       # IDD Pipeline（Issue → branch + PR → pipeline 接手）
 │   └── auto-merge-comment-pr.yml       # 舊版（已停用，改由 pipeline merge job 負責）
 └── doc/
     └── github-vibe-coding-books.md     # 書單參考

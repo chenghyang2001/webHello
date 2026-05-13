@@ -1,0 +1,45 @@
+# Issue-Driven Development (IDD) Pipeline
+# 當 Issue 建立時，自動建立 feature branch 並開 PR，
+# 讓 pr-agent-pipeline.yml 接手執行 classify → resolver → qa → merge。
+name: Issue-Driven Pipeline
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: issue-to-pr-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  create_pr_from_issue:
+    runs-on: ubuntu-latest
+    if: github.event.issue.user.login != 'github-actions[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create branch and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body || '（無描述）' }}
+        run: |
+          BRANCH="feature/issue-${ISSUE_NUMBER}"
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH"
+          PR_BODY=$(printf 'Resolves #%s\n\n## Issue 描述\n\n%s' "$ISSUE_NUMBER" "$ISSUE_BODY")
+          gh pr create \
+            --title "${ISSUE_TITLE}" \
+            --body "${PR_BODY}" \
+            --head "$BRANCH"
