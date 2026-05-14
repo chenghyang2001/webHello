@@ -1,0 +1,65 @@
+name: Scheduled Refactor
+
+# 每天台灣時間 4PM（UTC 08:00）自動執行重構
+# date guard：只在 2026-05-14、15、16 三天有效，之後自動停用
+on:
+  schedule:
+    - cron: '0 8 14 5 *'  # May 14
+    - cron: '0 8 15 5 *'  # May 15
+    - cron: '0 8 16 5 *'  # May 16
+  workflow_dispatch:        # 供手動測試觸發
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 日期 guard
+        id: date-guard
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          echo "今日日期（UTC）：$TODAY"
+          if [[ "$TODAY" > "2026-05-16" ]]; then
+            echo "in_range=false" >> "$GITHUB_OUTPUT"
+            echo "已超過排程期間（2026-05-14 ~ 2026-05-16），自動停用"
+          else
+            echo "in_range=true" >> "$GITHUB_OUTPUT"
+            echo "日期在有效期間內，繼續執行"
+          fi
+
+      - name: Checkout repository
+        if: steps.date-guard.outputs.in_range == 'true'
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python 3.11
+        if: steps.date-guard.outputs.in_range == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        if: steps.date-guard.outputs.in_range == 'true'
+        run: pip install anthropic requests
+
+      - name: Configure git
+        if: steps.date-guard.outputs.in_range == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config credential.helper store
+
+      - name: Run refactor agent
+        if: steps.date-guard.outputs.in_range == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/refactor_agent.py
