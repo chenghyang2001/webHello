@@ -71,6 +71,45 @@ Base64 編碼：用 `btoa(unescape(encodeURIComponent(str)))` 支援中文
 
 ---
 
+## 排程重構 Pipeline（`scheduled-refactor.yml`）
+
+### 概述
+
+自動排程重構 Pipeline，依照 Architectural Directive 每日對 `index.html` 執行重構，並自動建立 PR。
+
+- **排程**：台灣時間每日 4PM（UTC 08:00），限 2026-05-14 ~ 2026-05-16 三天
+- **重構範圍**：僅 `index.html`（不碰 scripts）
+
+### Architectural Directive
+
+1. 尋找重複：掃描並找出任何重複的邏輯或程式碼區塊
+2. 抽取模組：將重複代碼提取為乾淨、可重複使用的工具函數或共用元件
+3. 嚴格禁令：絕對不要添加任何新功能或改變用戶界面
+4. 補充註解：為任何複雜的程式碼提取加入清晰的行內註解
+
+### 安全機制
+
+- **date-guard**：超過 2026-05-16 自動跳過（GITHUB_OUTPUT 機制，非 exit 0）
+- **HTML sanity check**：防止 Claude 回傳非 HTML 內容覆蓋 index.html
+- **branch 存在偵測**：防止同日第二次觸發失敗
+
+### 通知
+
+| 管道 | 說明 |
+|------|------|
+| GitHub Email | PR 建立/合併自動觸發 |
+| Telegram Bot | 若設定 `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`（可選） |
+
+### Secrets 需求
+
+| Secret | 必填 | 說明 |
+|--------|------|------|
+| `ANTHROPIC_API_KEY` | ✅ | Claude API |
+| `TELEGRAM_BOT_TOKEN` | 選填 | Telegram 通知 |
+| `TELEGRAM_CHAT_ID` | 選填 | Telegram Chat ID |
+
+---
+
 ## Issue-Driven Development Pipeline（`issue-driven-pipeline.yml`）
 
 ### 概述
@@ -178,13 +217,15 @@ helloWeb/
 ├── scripts/
 │   ├── classify_pr.py                  # Haiku 分類 PR
 │   ├── resolver_agent.py               # Sonnet 處理 PR
-│   └── qa_agent.py                     # Sonnet QA 驗證
+│   ├── qa_agent.py                     # Sonnet QA 驗證
+│   └── refactor_agent.py               # 排程重構代理（Claude Sonnet）
 ├── comments/                           # PR 自動合併後的留言檔案
 ├── .github/
 │   ├── dependabot.yml                  # Dependabot 自動追蹤 pip / Actions 版本更新
 │   └── workflows/
 │       ├── pr-agent-pipeline.yml       # 主 Pipeline（classify→resolver→qa→merge）
 │       ├── issue-driven-pipeline.yml   # IDD Pipeline（Issue → branch + PR → pipeline 接手）
+│       ├── scheduled-refactor.yml      # 排程重構 Pipeline（每日 4PM 台灣時間，2026-05-14~16）
 │       └── auto-merge-comment-pr.yml   # 舊版（已停用，改由 pipeline merge job 負責）
 └── doc/
     └── github-vibe-coding-books.md     # 書單參考
