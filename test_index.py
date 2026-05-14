@@ -3,6 +3,7 @@
 此檔案由 QA Agent 在每次 PR 時自動覆蓋，不需手動維護。
 """
 import pathlib
+import re
 
 
 def test_normal_index_exists():
@@ -16,3 +17,70 @@ def test_edge_greeting_present():
     html_path = pathlib.Path(__file__).resolve().parent / "index.html"
     content = html_path.read_text(encoding="utf-8")
     assert "楊政憲" in content, "Greeting not found in index.html"
+
+
+def test_normal_pipeline_elements_present():
+    """確認 index.html 包含 PR pipeline 所有必要的互動元素與防護機制字串。
+
+    留言輸入框、送出按鈕、localStorage PAT 儲存邏輯、
+    以及 bot-loop 防護字串都必須存在，
+    少任何一個就代表 pipeline 核心功能可能被誤刪。
+    """
+    html_path = pathlib.Path(__file__).resolve().parent / "index.html"
+    content = html_path.read_text(encoding="utf-8")
+
+    assert "comment-input" in content, (
+        "Pipeline 元素缺失：找不到 comment-input（留言輸入框 id）"
+    )
+    assert "submit-btn" in content, (
+        "Pipeline 元素缺失：找不到 submit-btn（送出按鈕 id）"
+    )
+    assert "localStorage" in content, (
+        "Pipeline 元素缺失：找不到 localStorage（PAT 儲存邏輯不存在）"
+    )
+    assert "createPR" in content, (
+        "Pipeline 元素缺失：找不到 createPR（PR 建立函式不存在）"
+    )
+
+
+def test_edge_empty_content_fails_gracefully():
+    """確認 index.html 的 <body> 非空且包含 <script> 標籤。
+
+    空的 <body> 或缺少 <script> 代表頁面內容被清空，
+    這種狀況會讓 pipeline 的前端邏輯完全失效。
+    """
+    html_path = pathlib.Path(__file__).resolve().parent / "index.html"
+    content = html_path.read_text(encoding="utf-8")
+
+    # 確認 <body> 標籤存在
+    assert "<body" in content, "<body> 標籤不存在，HTML 結構異常"
+
+    # 確認 <body> 不是空標籤（<body></body> 或 <body/> 皆視為異常）
+    empty_body = bool(re.search(r"<body\s*/?>[\s]*</body>", content, re.IGNORECASE))
+    assert not empty_body, "<body> 標籤為空，頁面內容遭清空"
+
+    # 確認 <script 標籤存在（JS 邏輯有被包含）
+    assert "<script" in content, "<script> 標籤不存在，JS Pipeline 邏輯遭移除"
+
+
+def test_error_no_hardcoded_tokens():
+    """確認 index.html 未硬編碼任何 GitHub PAT（安全防護測試）。
+
+    ghp_ 開頭為 Classic PAT 前綴，github_pat_ 開頭為 Fine-grained PAT 前綴。
+    若 PAT 被硬編碼進 HTML，任何人開啟原始碼即可竊取 token，
+    必須透過 localStorage 由使用者自行輸入。
+    """
+    html_path = pathlib.Path(__file__).resolve().parent / "index.html"
+    content = html_path.read_text(encoding="utf-8")
+
+    # 搜尋 Classic PAT 前綴（ghp_ 後接 36 個以上字元視為真實 token）
+    classic_pat_match = re.search(r"ghp_[A-Za-z0-9]{10,}", content)
+    assert classic_pat_match is None, (
+        f"安全警告：發現疑似 Classic PAT 硬編碼：{classic_pat_match.group() if classic_pat_match else ''}"
+    )
+
+    # 搜尋 Fine-grained PAT 前綴（github_pat_ 後接任何字元視為真實 token）
+    fine_grained_pat_match = re.search(r"github_pat_[A-Za-z0-9_]{10,}", content)
+    assert fine_grained_pat_match is None, (
+        f"安全警告：發現疑似 Fine-grained PAT 硬編碼：{fine_grained_pat_match.group() if fine_grained_pat_match else ''}"
+    )

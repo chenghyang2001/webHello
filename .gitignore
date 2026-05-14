@@ -12,6 +12,7 @@ desktop.ini
 # 環境變數 / 機密
 .env
 .env.*
+!.env.example
 credentials.json
 token.json
 *.pem
