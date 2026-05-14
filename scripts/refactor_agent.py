@@ -137,17 +137,45 @@ def checkout_or_create_branch(branch_name: str, repo_root: str) -> None:
         )
 
 
-def validate_html_response(result: str) -> bool:
-    """驗證 Claude 回傳內容是否為有效 HTML。
+def strip_markdown_codeblock(text: str) -> str:
+    """移除 Claude 可能加的 Markdown code block 包裹（```html ... ```）。
 
-    Claude 可能回傳 Markdown 包覆的 HTML（```html...```）或錯誤訊息，
-    直接寫入 index.html 會導致 GitHub Pages 顯示原始文字而非網頁。
+    Claude API 有時在 system prompt 要求「只回 HTML」的情況下仍會用
+    Markdown fenced code block 包裹回應，導致 index.html 寫入後以
+    ` ```html ` 開頭而非 `<!DOCTYPE html>`，使 GitHub Pages 損壞。
     """
-    stripped = result.strip()
-    return (
-        stripped.lower().startswith("<!doctype")
-        or "<html" in stripped.lower()
-    )
+    stripped = text.strip()
+    # 移除開頭的 ```html 或 ```（任何語言標籤）
+    if stripped.startswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1:]
+    # 移除結尾的 ```
+    if stripped.endswith("```"):
+        stripped = stripped[:-3].rstrip()
+    return stripped
+
+
+def validate_html_response(result: str, today: str) -> str:
+    """驗證 Claude 回傳內容是有效 HTML，並移除可能的 Markdown code block 包裹。
+
+    回傳清理後的 HTML 字串；驗證失敗則發 Telegram 錯誤通知並 sys.exit(1)。
+    嚴格檢查開頭（startswith）而非寬鬆包含檢查（in），避免 Markdown 包裹通過驗證。
+    """
+    cleaned = strip_markdown_codeblock(result)
+    cleaned_lower = cleaned.strip().lower()
+
+    # 嚴格檢查：開頭必須是 <!doctype 或 <html（不是只包含）
+    if not (cleaned_lower.startswith("<!doctype") or cleaned_lower.startswith("<html")):
+        error_msg = (
+            f"[helloWeb] 重構失敗（{today}）：Claude 回傳非 HTML 內容\n"
+            f"前 100 字元：{result.strip()[:100]}"
+        )
+        print(error_msg, file=sys.stderr)
+        send_telegram(error_msg)
+        sys.exit(1)
+
+    return cleaned
 
 
 def main() -> None:
@@ -203,20 +231,13 @@ def main() -> None:
         send_telegram(notice)
         return
 
-    # HTML sanity check：防止 Markdown 包覆或錯誤訊息覆蓋 index.html 導致 Pages 損壞
-    if not validate_html_response(result):
-        error_msg = (
-            f"[helloWeb] 重構失敗（{today}）：Claude 回傳非 HTML 內容\n"
-            f"前 100 字元：{result.strip()[:100]}"
-        )
-        print(error_msg, file=sys.stderr)
-        send_telegram(error_msg)
-        sys.exit(1)
+    # HTML sanity check：移除 Markdown 包覆並嚴格驗證開頭，防止 Pages 損壞
+    cleaned_result = validate_html_response(result, today)
 
     # 有重構內容：建立 branch、commit、push、建立 PR
     try:
         checkout_or_create_branch(branch_name, str(repo_root))
-        index_path.write_text(result, encoding="utf-8")
+        index_path.write_text(cleaned_result, encoding="utf-8")
         subprocess.run(
             ["git", "add", "index.html"],
             cwd=str(repo_root),
